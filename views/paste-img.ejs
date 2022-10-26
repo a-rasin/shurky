@@ -1,0 +1,80 @@
+<form>
+  <p id="result"></p>
+  <input id="input">
+  <button>Submit</button>
+</form>
+<canvas width="100" height="100"></canvas>
+
+ <script>
+   const canvas = document.querySelector("canvas");
+   const button = document.querySelector("button");
+   const result = document.querySelector('#result');
+   let imgUrl;
+
+   const getBase64Image = img => {
+     const ctx = canvas.getContext("2d");
+     const myImg = new Image();
+
+     myImg.onload = _ => {
+       let imageBase64,
+         divisor = 1;
+       const CHAR_THRESHOLD = 1000000;
+
+       // Get the img small enough so 413 errors don't occur
+       do {
+         const width = myImg.width / divisor;
+         const height = myImg.height / divisor;
+
+         canvas.width = width;
+         canvas.height = height;
+         ctx.drawImage(myImg, 0, 0, width, height);
+
+         imageBase64 = canvas.toDataURL("image/png");
+         divisor += 0.1;
+       } while (imageBase64.length > CHAR_THRESHOLD);
+
+       imgUrl = imageBase64;
+     };
+
+     myImg.src = img;
+   };
+
+   document.querySelector("#input").addEventListener('paste', e => {
+     const allFiles = e.clipboardData.items;
+
+     let file;
+     // Get first image in clipboard
+     for (let i = 0; i < allFiles.length; i ++) {
+       if (allFiles[i].type.indexOf("image") !== -1) {
+         file = allFiles[i].getAsFile();
+         break;
+       }
+     }
+
+     if (file) {
+       const objectUrl = URL.createObjectURL(file);
+       getBase64Image(objectUrl);
+     }
+   });
+
+   button.addEventListener('click', async (e) => {
+     e.preventDefault();
+     try {
+       const res = await fetch('/api/photo', {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+         },
+         body: JSON.stringify({ photo: imgUrl })
+       });
+
+       if (!res.ok) {
+         throw Error(res.statusText)
+       }
+
+       result.innerHTML = "Success";
+     } catch (err) {
+       result.innerHTML = err;
+     }
+   })
+ </script>

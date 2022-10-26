@@ -45,6 +45,10 @@ app.get('/protected', async (req, res) => {
   res.render('protected');
 });
 
+app.get('/paste-img', async (req, res) => {
+  res.render('paste-img');
+});
+
 app.get('/api/data', async (_, res) => {
   try {
     const { results } = await query('SELECT * FROM BOOKS');
@@ -54,6 +58,11 @@ app.get('/api/data', async (_, res) => {
   } catch (err) {
     res.status(500).send(err);
   }
+});
+
+app.post('/api/photo', async (req, res) => {
+  // Do something
+  console.log(req.body.photo)
 });
 
 app.post('/api/login', async (req, res) => {
