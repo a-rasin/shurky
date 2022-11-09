@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=, initial-scale=1.0">
   <link rel="stylesheet" href="http://cdn.dhtmlx.com/edge/dhtmlx.css" type="text/css"> 
+  <link rel="manifest" href="manifest.json">
   <script src="http://cdn.dhtmlx.com/edge/dhtmlx.js" type="text/javascript"></script>
   <title>Hello fren</title>
 </head>
@@ -22,6 +23,7 @@
   <button id="submit">SUBMIT</button>
   <p id="result"></p>
   <br>
+  <button id="installApp">Install</button>
   
   <div id="gridbox" style="width:300px;height:400px;"></div>  
   <script>
@@ -68,6 +70,38 @@
         result.innerHTML = err;
       }
     })
+
+    let deferredPrompt;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      deferredPrompt = e;
+    });
+
+    const installApp = document.getElementById('installApp');
+
+    installApp.addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          deferredPrompt = null;
+        }
+      }
+    });
+  </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('serviceWorker.js').then(function(registration) {
+          // Registration was successful
+          console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        }, function(err) {
+          // registration failed :(
+          console.log('ServiceWorker registration failed: ', err);
+        });
+      });
+    }
   </script>
 </body>
 </html>
