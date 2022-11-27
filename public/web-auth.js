@@ -82,10 +82,10 @@ registerButton.addEventListener('click', async () => {
   } catch (err) {
     console.error('registration failed', err);
 
-    loader.innerHTML = 'Registration failed';
+    loader.style.display = 'block';
+    loader.innerHTML = 'Registration failed: ' + err;
   } finally {
     registerButton.disabled = false;
-    loader.style.display = 'none';
   }
 })
 
@@ -153,11 +153,11 @@ authenticateButton.addEventListener('click', async () => {
   } catch(e) {
     console.error('authentication failed', e);
 
-    loader.innerHTML = 'Authentication failed';
+    loader.style.display = 'block';
+    loader.innerHTML = 'Authentication failed: ' + e;
   } finally {
     authenticateButton.disabled = false;
     deleteButton.disabled = false;
-    loader.style.display = 'none';
   }
 });
 

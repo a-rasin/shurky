@@ -8,9 +8,9 @@ const makePayment = (method) => async () => {
     paymentResponse.complete('success')
       .then(() => {
         // For demo purposes:
-        introPanel.style.display = 'none';
-        successPanel.style.display = 'block';
-      });
+        alert('done')
+      })
+      .catch((e) => console.log(e));
   })
 }
 
@@ -76,7 +76,7 @@ function buildShoppingCartDetails() {
 }
 
 // Enable available buttons
-new PaymentRequest(buildSupportedPaymentMethodData(), {
+new PaymentRequest([buildSupportedPaymentMethodData()[1]], {
   total: { label: "Stub", amount: { currency: "USD", value: "0.01" } },
 })
   .canMakePayment()
