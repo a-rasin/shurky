@@ -1,3 +1,5 @@
+let publicKey, prevCounter;
+
 const express = require('express');
 const crypto = require('crypto');
 const session = require('express-session');
@@ -127,9 +129,8 @@ app.get('/api/registration-options', async (req, res) => {
   const registrationOptions = await f2l.attestationOptions();
 
   req.session.challenge = Buffer.from(registrationOptions.challenge);
-  req.session.userHandle = crypto.randomBytes(32);
 
-  registrationOptions.user.id = req.session.userHandle;
+  registrationOptions.user.id = Buffer.from(req.session.user || '');
   registrationOptions.challenge = Buffer.from(registrationOptions.challenge);
 
   // iOS
@@ -164,8 +165,8 @@ app.post('/api/register', async (req, res) => {
   try {
     const regResult = await f2l.attestationResult(credential, attestationExpectations);
 
-    req.session.publicKey = regResult.authnrData.get('credentialPublicKeyPem');
-    req.session.prevCounter = regResult.authnrData.get('counter');
+    publicKey = regResult.authnrData.get('credentialPublicKeyPem'); // should store key in db and associate it to logged in user
+    prevCounter = regResult.authnrData.get('counter');
 
     res.json({status: 'ok'});
   }
@@ -181,7 +182,7 @@ app.post('/api/authenticate', async (req, res) => {
   credential.rawId = new Uint8Array(Buffer.from(credential.rawId, 'base64')).buffer;
 
   const challenge = new Uint8Array(req.session.challenge.data).buffer;
-  const {publicKey, prevCounter} = req.session;
+  // const {publicKey, prevCounter} = req.session; // should get publciKey from db based on logged in user
 
   if(publicKey === 'undefined' || prevCounter === undefined) {
     res.status(401).json({status: 'non authorized'});
@@ -192,8 +193,9 @@ app.post('/api/authenticate', async (req, res) => {
       origin: 'http://localhost:5000',
       factor: 'either',
       publicKey,
+      // these 2 seem to make no difference, but errors get thrown if they are not present
       prevCounter,
-      userHandle: new Uint8Array(Buffer.from(req.session.userHandle, 'base64')).buffer  //new Uint8Array(Buffer.from(req.session.userHandle.data)).buffer
+      userHandle: new Uint8Array(Buffer.from(req.session.user || '', 'base64')).buffer
     };
 
     try {
