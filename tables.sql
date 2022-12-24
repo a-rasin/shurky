@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS USERS (
     name  CHAR(255) NOT NULL,
     phone CHAR(255) NOT NULL,
     visitorType  INT   NOT NULL,
+    password CHAR(200),
+    publicKey TEXT,
+    raw_id BLOB,
     PRIMARY KEY (id),
     FOREIGN KEY (visitorType) REFERENCES USER_TYPES(id)
 );

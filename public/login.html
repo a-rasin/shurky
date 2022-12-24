@@ -1,0 +1,62 @@
+<h1>Login</h1>
+
+<p id="user"></p>
+<a href="../">Back</a>
+
+<p id="error" style="color:red"></p>
+<p id="success" style="color:green"></p>
+<br>
+
+<input id="phone" placeholder="Phone number" type="number">
+<br>
+<input id="password" type="password">
+<br>
+<button>Submit</button>
+
+<script>
+  const loggedInAs = JSON.parse(localStorage.getItem('user'));
+  const phone = document.querySelector('#phone');
+  const password = document.querySelector('#password');
+  const error = document.querySelector('#error');
+  const success = document.querySelector('#success');
+  const user = document.querySelector('#user');
+  const button = document.querySelector('button');
+
+  if (loggedInAs)
+    user.innerHTML = 'Logged in as: ' + loggedInAs.name;
+
+  button.addEventListener('click', async () => {
+    try {
+      const data = {
+        phone: phone.value,
+        password: password.value,
+      };
+
+      const res = await fetch('/api/login-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+
+      const json = await res.json();
+      console.log(json)
+      if (!res.ok) {
+        throw Error(json.message || res.statusText)
+      }
+
+      localStorage.setItem('user', JSON.stringify(json));
+
+      error.innerHTML = "";
+      success.innerHTML = "Success";
+      user.innerHTML = "Logged in as: " + json.name;
+      phone.value = "";
+      password.value = "";
+    } catch (err) {
+      error.innerHTML = err;
+      success.innerHTML = "";
+      user.innerHTML = "";
+    }
+  })
+</script>

@@ -55,6 +55,7 @@ function buildSupportedPaymentMethodData() {
   return [
     {supportedMethods: "https://apple.com/apple-pay", data: applePaymentDataRequest},
     {supportedMethods: 'https://google.com/pay', data: googlePaymentDataRequest},
+    // {supportedMethods: 'basic-card', data: { supporedNetworks: googlePaymentDataRequest.allowedPaymentMethods[0].parameters.allowedCardNetworks.map(a => a.toLowerCase())}},
   ];
 }
 

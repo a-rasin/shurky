@@ -9,7 +9,14 @@
   <title>Hello fren</title>
 </head>
 <body>
+  <p id="user"></p>
+  <br>
+  
   <a href="/template">Template Page</a>
+  <br>
+  <a href="/nova.html">Nova, register user</a>
+  <br>
+  <a href="/login.html">Login</a>
   <br>
   <a href="/no.html">No</a>
   <br>
@@ -31,6 +38,12 @@
   
   <div id="gridbox" style="width:300px;height:400px;"></div>  
   <script>
+    const loggedInAs = JSON.parse(localStorage.getItem('user'));
+    const user = document.querySelector('#user');
+
+    if (loggedInAs)
+      user.innerHTML = 'Logged in as: ' + loggedInAs.name;
+
     mygrid = new dhtmlXGridObject('gridbox');
 
     //the path to images required by grid 
