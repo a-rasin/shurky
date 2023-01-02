@@ -1,5 +1,3 @@
-let publicKey, prevCounter;
-
 const express = require('express');
 const crypto = require('crypto');
 const session = require('express-session');
@@ -7,6 +5,7 @@ const dotenv = require('dotenv');
 const mysql = require('mysql');
 const base64url = require('base64url');
 const { Fido2Lib } = require("fido2-lib");
+const { isAuthed } = require('./middleware/auth.js');
 dotenv.config();
 var pool  = mysql.createPool({
   connectionLimit: process.env.DB_MAX_CON,
@@ -17,12 +16,14 @@ var pool  = mysql.createPool({
 });
 
 const f2l = new Fido2Lib({
-    challengeSize: 128,
-    attestation: "none",
-    cryptoParams: [-7, -257],
-    authenticatorAttachment: "platform",
-    authenticatorRequireResidentKey: false,
-    authenticatorUserVerification: "required"
+  rpId: "localhost", // relying party id: url or domain of server
+  challengeSize: 128,
+  attestation: "none",
+  cryptoParams: [-7, -257], // list of COSE algorithm identifiers
+  authenticatorAttachment: "platform",
+  // required for usernameless login
+  authenticatorRequireResidentKey: true, // whether authenticators must store the key internally (true) or if they can use a key derivation function to generate keys
+  authenticatorUserVerification: "required"
 });
 
 const app = express();
@@ -36,6 +37,15 @@ app.use(session({
     sameSite: "lax"
   }
 }));
+
+// store user details in session
+const loginUser = (req, user) => {
+  // Store user details in the session
+  req.session.user_id = user.id.toString();
+  req.session.name = user.name;
+  req.session.publicKey = user.publicKey;
+  req.session.raw_id = user.raw_id;
+}
 
 const port = process.env.PORT || 5000;
 
@@ -132,18 +142,12 @@ app.post('/api/login-user', async (req, res) => {
 
     const { results } = await query('SELECT * FROM USERS WHERE phone = ? AND password = ?', [phone, password]);
 
-    console.log(results)
     if (results.length === 0) {
       return res.status(401).send({message:"Password or Username is wrong"});
     }
 
-    // Store user details in the session
-    req.session.id = results[0].id;
-    req.session.name = results[0].name;
-    req.session.publicKey = results[0].publicKey;
-    req.session.raw_id = results[0].raw_id;
+    loginUser(req, results[0]);
 
-    console.log({ name: results[0].name, publicKey: results[0].publicKey, raw_id: results[0].raw_id });
     res.send({ name: results[0].name, publicKey: results[0].publicKey, raw_id: results[0].raw_id });
   } catch (err) {
   console.log(err)
@@ -152,9 +156,9 @@ app.post('/api/login-user', async (req, res) => {
 });
 
 // Get registration options when user registers new credential
-app.get('/api/registration-options', async (req, res) => {
+app.get('/api/registration-options', isAuthed, async (req, res) => {
   // Get default registration options
-  const registrationOptions = await f2l.attestationOptions();
+  const registrationOptions = await f2l.attestationOptions({ authenticatorSelection: { requireResidentKey: true}});
 
   // put challenge into session
   // challenge: cryptographically random bytes to prevent "replay attacks"
@@ -164,7 +168,7 @@ app.get('/api/registration-options', async (req, res) => {
   //      when bob asks for proof of identity Eve replays the hash she heard from alice.
   req.session.challenge = Buffer.from(registrationOptions.challenge);
 
-  registrationOptions.user.id = Buffer.from(req.session.id || '');
+  registrationOptions.user.id = Buffer.from(req.session.user_id || '');
   // convert challenge into buffer
   registrationOptions.challenge = Buffer.from(registrationOptions.challenge);
 
@@ -188,7 +192,7 @@ app.get('/api/authentication-options', async (req, res) => {
 })
 
 // Post: regiser a new credential
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', isAuthed, async (req, res) => {
   const {credential} = req.body;
   const rawId = credential.rawId;
 
@@ -211,15 +215,14 @@ app.post('/api/register', async (req, res) => {
     // get result of comparison between credential and expectations, if expectations not met this will throw an error
     const regResult = await f2l.attestationResult(credential, attestationExpectations);
 
-    publicKey = regResult.authnrData.get('credentialPublicKeyPem');
+    const publicKey = regResult.authnrData.get('credentialPublicKeyPem');
 
     // Store new credentials in session
     req.session.raw_id = rawId;
     req.session.publicKey = publicKey;
-    // prevCounter = regResult.authnrData.get('counter');
 
     // Store new credentials in db
-    await query('UPDATE USERS SET publicKey = ?, raw_id = ? WHERE id = ?', [publicKey, rawId, req.session.id]);
+    await query('UPDATE USERS SET publicKey = ?, raw_id = ? WHERE id = ?', [publicKey, rawId, req.session.user_id]);
 
     res.json({status: 'ok', raw_id: rawId, publicKey});
   }
@@ -238,10 +241,9 @@ app.post('/api/authenticate', async (req, res) => {
 
   const {publicKey, raw_id} = req.session;
 
-  if(publicKey === 'undefined' || raw_id === undefined) {
+  if (publicKey === 'undefined' || raw_id === undefined) {
     res.status(401).json({status: 'non authorized'});
-  }
-  else {
+  } else {
     const assertionExpectations = {
       challenge,
       origin: 'http://localhost:5000',
@@ -249,7 +251,7 @@ app.post('/api/authenticate', async (req, res) => {
       publicKey,
       // these 2 seem to make no difference, but errors get thrown if they are not present
       prevCounter: 0,
-      userHandle: new Uint8Array(Buffer.from(req.session.user || '', 'base64')).buffer
+      userHandle: btoa(req.session.user_id)
     };
 
     try {
@@ -264,9 +266,47 @@ app.post('/api/authenticate', async (req, res) => {
   }
 });
 
-app.put('/api/delete-credential', async (req, res) => {
+app.post('/api/authenticate-advanced', async (req, res) => {
+  const {credential} = req.body;
+
+  const rawId = credential.rawId;
+  credential.rawId = new Uint8Array(Buffer.from(credential.rawId, 'base64')).buffer;
+
+  const challenge = new Uint8Array(req.session.challenge.data).buffer;
+
   try {
-    query('UPDATE USERS set raw_id = "", publicKey = "" WHERE id = ?', [req.session.id]);
+    // find a user with a this credential's raw_id
+    const { results } = await query('SELECT * from USERS WHERE raw_id = ?', [rawId]);
+
+    if (results.length === 0) {
+      return res.status(401).send({message:"No user with such credential"});
+    }
+
+    const assertionExpectations = {
+      challenge,
+      origin: 'http://localhost:5000',
+      factor: 'either',
+      publicKey: results[0].publicKey,
+      // needed this time, user_id to base64
+      userHandle: btoa(results[0].id),
+      // this seems to make no difference, but errors get thrown if it's not present
+      prevCounter: 0,
+    };
+
+    await f2l.assertionResult(credential, assertionExpectations); // will throw on error
+    loginUser(req, results[0]);
+
+    res.json({ name: results[0].name, publicKey: results[0].publicKey, raw_id: results[0].raw_id });
+  }
+  catch(e) {
+    console.log('error', e);
+    res.status(500).json({status: 'failed'});
+  }
+});
+
+app.put('/api/delete-credential', isAuthed, async (req, res) => {
+  try {
+    query('UPDATE USERS set raw_id = "", publicKey = "" WHERE id = ?', [req.session.user_id]);
 
     res.json({status: 'ok'});
   }
@@ -274,6 +314,15 @@ app.put('/api/delete-credential', async (req, res) => {
     console.log('error', e);
     res.status(500).json({status: 'failed'});
   }
+});
+
+app.post('/api/logout', isAuthed, async (req, res) => {
+  req.session.user_id = false;
+  req.session.name = false;
+  req.session.publicKey = false;
+  req.session.raw_id = false;
+
+  res.json({status: 'ok'});
 });
 
 

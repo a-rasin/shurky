@@ -9,13 +9,16 @@
   <a href="/">Home</a>
   <br>
 
+  <p id="user"></p>
   <button id="register">register</button>
-  <button id="authenticate" style="display:none">authenticate</button>
+  <!-- <button id="authenticate" style="display:none">authenticate</button> -->
   <button id="authenticate-advanced">authenticate only with a credential</button>
   <button id="delete" style="display:none">delete</button>
+  <button id="logout" style="display:none">Logout</button>
   <p id="loader" style="display:none">Loading...</p>
 
-  <script src="./web-auth.js"></script>
+  <script type="module" src="./utils.js"></script>
+  <script type="module" src="./web-auth.js"></script>
 </body>
 </html>
 
