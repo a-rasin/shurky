@@ -1,3 +1,7 @@
+/**
+  * This is a copy of an earlier version of server but using mssql to
+  * demonstrate how to use the library to fetch data from sql-server
+  */
 const express = require('express');
 const session = require('express-session');
 const dotenv = require('dotenv');

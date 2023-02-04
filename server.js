@@ -1,5 +1,5 @@
 const express = require('express');
-const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const session = require('express-session');
 const dotenv = require('dotenv');
 const mysql = require('mysql');
@@ -27,12 +27,16 @@ const f2l = new Fido2Lib({
 });
 
 const app = express();
+
+// initialize middleware
+// these 2 are needed to parse data from POST and PUT requests correctly
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+
 app.use(session({
-  secret: 'foo',
-  resave: false,
-  saveUninitialized: false,
+  secret: 'foo', // some string, this should usually be set in an .env file
+  resave: false, // forces the session to be resaved in the session store, usually we want this to be false
+  saveUninitialized: false, // saves session when it's new but not modified, usually false is best
   cookie: {
     sameSite: "lax"
   }
@@ -49,8 +53,10 @@ const loginUser = (req, user) => {
 
 const port = process.env.PORT || 5000;
 
+// server static filfes
 app.use(express.static('./public'));
 
+// set view engine
 app.set('view engine', 'ejs');
 
 app.get('/template', async (_, res) => {
@@ -69,7 +75,7 @@ app.get('/protected', async (req, res) => {
   res.render('protected');
 });
 
-app.get('/paste-img', async (req, res) => {
+app.get('/paste-img', async (_, res) => {
   res.render('paste-img');
 });
 
@@ -122,9 +128,13 @@ app.get('/api/phone-lookup/:phone', async (req, res) => {
 app.post('/api/create-user/', async (req, res) => {
   try {
     const { firstName, password, lastName, phone, visitorType } = req.body;
+
+    // hash password
+    const hash = await bcrypt.hash(password, 12);
+
     const { results } = await query('INSERT INTO USERS(name, password, phone, visitorType) VALUES(?, ?, ?, ?)', [
       firstName + ' ' + lastName,
-      password,
+      hash,
       phone,
       visitorType
     ]);
@@ -140,9 +150,13 @@ app.post('/api/login-user', async (req, res) => {
   try {
     const { phone, password } = req.body;
 
-    const { results } = await query('SELECT * FROM USERS WHERE phone = ? AND password = ?', [phone, password]);
+    const { results } = await query('SELECT * FROM USERS WHERE phone = ?', [phone]);
+    console.log(results, password)
 
-    if (results.length === 0) {
+    // compare password to hash in db
+    const match = await bcrypt.compare(password, results[0]?.password);
+
+    if (results.length === 0 || !match) {
       return res.status(401).send({message:"Password or Username is wrong"});
     }
 
@@ -150,7 +164,7 @@ app.post('/api/login-user', async (req, res) => {
 
     res.send({ name: results[0].name, publicKey: results[0].publicKey, raw_id: results[0].raw_id });
   } catch (err) {
-  console.log(err)
+    console.log(err)
     res.status(500).send(err);
   }
 });
@@ -235,6 +249,7 @@ app.post('/api/register', isAuthed, async (req, res) => {
 app.post('/api/authenticate', async (req, res) => {
   const {credential} = req.body;
 
+  // convert from base64 to Uint8Array
   credential.rawId = new Uint8Array(Buffer.from(credential.rawId, 'base64')).buffer;
 
   const challenge = new Uint8Array(req.session.challenge.data).buffer;
@@ -326,6 +341,13 @@ app.post('/api/logout', isAuthed, async (req, res) => {
 });
 
 
+/** Helper to convert the pool.query callback based function into one that uses
+  * promises and can be used in the async/await fashion
+  *
+  * @param query The sql query
+  * @param extra An array of parameters for the sql query
+  * @returns A promise that either rejects on error or resolves with { results, fields }
+  */
 const query = (query, extra) => (new Promise((resolve, reject) => {
   pool.query(query, extra, function (error, results, fields) {
     if (error) return reject(error);
